@@ -1,70 +1,119 @@
 const express = require("express");
 const cors = require("cors");
+const mongoose = require("mongoose");
+const validator = require("validator");
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 const app = express();
 const PORT = 3000;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-let employees = [
-  { id: 1, name: "Alice Johnson", email: "alice.johnson@company.com", department: "Engineering" },
-  { id: 2, name: "Bob Smith", email: "bob.smith@company.com", department: "Human Resources" },
-  { id: 3, name: "Carol White", email: "carol.white@company.com", department: "Marketing" }
-];
+// MongoDB connection
+mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/employees", {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+const db = mongoose.connection;
+db.on("error", console.error.bind(console, "MongoDB connection error:"));
+db.once("open", () => console.log("✅ Connected to MongoDB"));
 
-let nextId = 4; // start ID after initial data
+// Schema + Model
+const employeeSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Name is required"],
+    },
+    email: {
+      type: String,
+      required: [true, "Email is required"],
+      unique: true,
+      validate: [validator.isEmail, "Invalid email format"],
+    },
+    department: {
+      type: String,
+      required: [true, "Department is required"],
+    },
+  },
+  { timestamps: true }
+);
+
+const Employee = mongoose.model("Employee", employeeSchema);
+
+// Routes
 
 // GET all employees
-app.get("/api/employees", (req, res) => {
-  res.json(employees);
+app.get("/api/employees", async (req, res) => {
+  try {
+    const employees = await Employee.find();
+    res.json(employees);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch employees" });
+  }
 });
 
-// GET employee by ID
-app.get("/api/employees/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const employee = employees.find(emp => emp.id === id);
-  if (employee) res.json(employee);
-  else res.status(404).json({ error: "Employee not found" });
+// GET one employee
+app.get("/api/employees/:id", async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) return res.status(404).json({ error: "Employee not found" });
+    res.json(employee);
+  } catch (error) {
+    res.status(400).json({ error: "Invalid employee ID" });
+  }
 });
 
 // POST new employee
-app.post("/api/employees", (req, res) => {
-  const { name, email, department } = req.body;
-  const newEmployee = {
-    id: nextId++,
-    name,
-    email,
-    department
-  };
-  employees.push(newEmployee);
-  res.status(201).json(newEmployee);
+app.post("/api/employees", async (req, res) => {
+  try {
+    const newEmployee = new Employee(req.body);
+    await newEmployee.save();
+    res.status(201).json(newEmployee);
+  } catch (error) {
+    if (error.code === 11000) {
+      res.status(400).json({ error: "Email already exists" });
+    } else if (error.name === "ValidationError") {
+      res.status(400).json({ error: Object.values(error.errors).map(e => e.message).join(", ") });
+    } else {
+      res.status(500).json({ error: "Failed to create employee" });
+    }
+  }
 });
 
 // PUT update employee
-app.put("/api/employees/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const index = employees.findIndex(emp => emp.id === id);
-  if (index !== -1) {
-    employees[index] = { id, ...req.body };
-    res.json(employees[index]);
-  } else {
-    res.status(404).json({ error: "Employee not found" });
+app.put("/api/employees/:id", async (req, res) => {
+  try {
+    const updatedEmployee = await Employee.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+    if (!updatedEmployee) return res.status(404).json({ error: "Employee not found" });
+    res.json(updatedEmployee);
+  } catch (error) {
+    if (error.name === "ValidationError") {
+      res.status(400).json({ error: Object.values(error.errors).map(e => e.message).join(", ") });
+    } else {
+      res.status(400).json({ error: "Invalid update or ID" });
+    }
   }
 });
 
 // DELETE employee
-app.delete("/api/employees/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const index = employees.findIndex(emp => emp.id === id);
-  if (index !== -1) {
-    const deleted = employees.splice(index, 1);
-    res.json(deleted[0]);
-  } else {
-    res.status(404).json({ error: "Employee not found" });
+app.delete("/api/employees/:id", async (req, res) => {
+  try {
+    const deletedEmployee = await Employee.findByIdAndDelete(req.params.id);
+    if (!deletedEmployee) return res.status(404).json({ error: "Employee not found" });
+    res.json(deletedEmployee);
+  } catch (error) {
+    res.status(400).json({ error: "Invalid employee ID" });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
