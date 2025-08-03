@@ -3,6 +3,8 @@ import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import './App.css';
+
 
 const baseUrl = "http://localhost:3000/api";
 
@@ -28,6 +30,11 @@ function App() {
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
+<div className="form-wrapper d-flex justify-content-center">
+  <div className="card shadow-lg p-4 mb-5 border-0 rounded-4 form-card">
+    {/* ...form content stays the same... */}
+  </div>
+</div>
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -82,7 +89,7 @@ function App() {
       <ToastContainer position="top-right" autoClose={3000} />
 
       <h2 className="text-center mb-4 text-primary fw-bold">
-        📋 MongoDB Employee Directory
+     Employee Management System
       </h2>
 
       {/* Form */}
